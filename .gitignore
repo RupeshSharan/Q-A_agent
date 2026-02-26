@@ -1,0 +1,13 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Environment
+.env
+
+# Streamlit
+.streamlit/
+
+# Local vector store
+data/chroma/
