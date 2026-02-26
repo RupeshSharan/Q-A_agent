@@ -234,6 +234,17 @@ section[data-testid="stSidebar"] hr {
     box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important;
 }
 
+/* Sidebar button text fix */
+section[data-testid="stSidebar"] .stButton > button {
+    color: #ECFDF5 !important;
+    background-color: rgba(6, 95, 70, 0.7) !important;
+    border: 1px solid rgba(52, 211, 153, 0.4) !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background-color: rgba(16, 185, 129, 0.5) !important;
+    color: #FFFFFF !important;
+}
+
 /* Chat input styling */
 .stChatInput > div {
     border-radius: 14px !important;
