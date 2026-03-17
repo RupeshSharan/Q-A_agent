@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -11,3 +11,9 @@ __pycache__/
 
 # Local vector store
 data/chroma/
+
+# Logs and Databases
+*.log
+*.txt
+*.db
+database.db

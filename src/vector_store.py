@@ -279,6 +279,50 @@ class ChromaVectorStore:
         unique_sorted = sorted(set(sources))
         return unique_sorted[:limit]
 
+    def delete_source(self, source_name: str) -> int:
+        """Delete all chunks belonging to a single source filename."""
+        source = source_name.strip()
+        if not source:
+            return 0
+
+        if self.backend_name == "chroma" and self.collection is not None:
+            all_items: Dict[str, Any] = self.collection.get(include=["metadatas"])
+            raw_ids = all_items.get("ids", [])
+            raw_metadatas = all_items.get("metadatas", [])
+
+            ids: List[object] = []
+            if isinstance(raw_ids, list):
+                ids = raw_ids
+
+            metadatas: List[object] = []
+            if isinstance(raw_metadatas, list):
+                metadatas = raw_metadatas
+
+            matching_ids: List[str] = []
+            for item_id, metadata in zip(ids, metadatas):
+                if not isinstance(item_id, str) or not isinstance(metadata, dict):
+                    continue
+                item_source = metadata.get("source")
+                if isinstance(item_source, str) and item_source.strip() == source:
+                    matching_ids.append(item_id)
+
+            if matching_ids:
+                self.collection.delete(ids=matching_ids)
+            return len(matching_ids)
+
+        matching_ids = [
+            item_id
+            for item_id, item in self._fallback_items.items()
+            if str(item.metadata.get("source", "")).strip() == source
+        ]
+        if not matching_ids:
+            return 0
+
+        for item_id in matching_ids:
+            self._fallback_items.pop(item_id, None)
+        self._save_fallback()
+        return len(matching_ids)
+
     def clear(self) -> None:
         """Delete all vectors from this collection."""
         if self.backend_name == "chroma" and self.collection is not None:

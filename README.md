@@ -1,210 +1,148 @@
-﻿# 🧠 DocMind AI — Document Q&A Agent
+# DocMind Platform
 
-A powerful **Retrieval-Augmented Generation (RAG)** application that lets you upload PDF/TXT documents, index them locally, and ask natural-language questions — receiving precise, grounded answers powered by **Google Gemini**.
+DocMind is now structured as a two-portal product on top of one FastAPI backend:
 
----
+- `admin-portal` (React + TypeScript): admin login, document upload, user list, chat/history.
+- `customer-portal` (React + TypeScript): customer login, Q&A chat, personal history.
+- `backend` (FastAPI + SQLite + JWT + existing RAG modules): auth, docs, chat APIs.
 
-## ✨ Key Features
+The existing local RAG engine remains in `src/` and is reused by the backend.
 
-| Feature | Description |
-|---------|-------------|
-| 📄 **Multi-format Ingestion** | Upload `.pdf` and `.txt` files with automatic text extraction |
-| 🔍 **Sentence-Aware Chunking** | Splits documents at sentence boundaries for better context preservation |
-| 🧬 **Local Embeddings** | Generates embeddings locally with `sentence-transformers` (no data leaves your machine) |
-| 💾 **Persistent Vector Store** | Stores vectors + metadata in local **ChromaDB** with automatic fallback |
-| 🎯 **Query Expansion** | Dual-pass retrieval (semantic + keyword) for higher recall |
-| ✍️ **Typo Correction** | Auto-corrects spelling/grammar errors in queries before retrieval |
-| 🤖 **Gemini-Powered Answers** | Generates grounded answers with source citations using Google Gemini |
-| 🖥️ **Modern UI** | Dark theme with radiant green accents, glassmorphism sidebar, similarity badges |
-| ⌨️ **CLI Mode** | Full CLI for scripting: ingest, ask, interactive chat, stats, clear |
+## Architecture
 
----
+1. Admin uploads PDF/TXT.
+2. Backend saves file to `backend/storage/pdfs`.
+3. Backend ingests file with existing pipeline (`src/ingestion.py`, `src/rag_pipeline.py`).
+4. Chunks and embeddings are stored in Chroma (`backend/data/chroma` by default).
+5. Customer asks a question.
+6. Backend retrieves relevant chunks and generates answer via Gemini.
+7. Q&A history is stored in SQLite (`database.db`).
 
-## 🏗️ Architecture
+## Project Structure
 
-```mermaid
-graph LR
-    A[📄 Document Upload] --> B[Text Extraction]
-    B --> C[Sentence-Aware Chunking]
-    C --> D[Local Embedding<br/>sentence-transformers]
-    D --> E[ChromaDB<br/>Vector Store]
-    
-    F[❓ User Question] --> G[Typo Correction<br/>Gemini]
-    G --> H[Query Expansion]
-    H --> D
-    D --> I[Top-K Retrieval<br/>+ Similarity Filter]
-    I --> J[Gemini Answer<br/>Generation]
-    J --> K[✅ Grounded Answer<br/>with Citations]
-```
-
----
-
-## 📁 Project Structure
-
-```
+```text
 Q-A_agent/
-├── app.py                 # Streamlit web UI
-├── cli.py                 # Command-line interface
-├── .env                   # Environment configuration
-├── requirements.txt       # Python dependencies
-├── pytest.ini             # Test configuration
-├── data/
-│   └── chroma/            # Persistent vector storage
-├── src/
-│   ├── __init__.py
-│   ├── config.py          # Settings from environment variables
-│   ├── ingestion.py       # PDF/TXT parsing + sentence-aware chunking
-│   ├── embeddings.py      # Local sentence-transformer wrapper
-│   ├── vector_store.py    # ChromaDB with pickle fallback
-│   ├── retriever.py       # Query expansion + dual-pass retrieval
-│   ├── prompts.py         # Chain-of-thought prompt templates
-│   ├── llm.py             # Gemini API client + typo correction
-│   ├── rag_pipeline.py    # End-to-end RAG orchestration
-│   └── types.py           # Shared type definitions
-└── tests/
-    ├── test_ingestion.py
-    ├── test_pipeline.py
-    └── test_vector_store.py
+|-- admin-portal/
+|-- customer-portal/
+|-- backend/
+|   |-- app/
+|   |   |-- main.py
+|   |   |-- auth.py
+|   |   |-- db.py
+|   |   |-- security.py
+|   |   |-- schemas.py
+|   |   `-- rag_runtime.py
+|   |-- storage/pdfs/
+|   `-- data/chroma/
+|-- src/                  # existing RAG modules reused by backend
+|-- tests/
+|-- app.py                # legacy Streamlit UI (still usable)
+|-- cli.py                # legacy CLI (still usable)
+`-- database.db           # created at runtime
 ```
 
----
+## Backend Features Implemented
 
-## 🚀 Quick Start
+- JWT auth (implemented manually with HMAC SHA256, no external auth provider).
+- Password hashing with PBKDF2.
+- Role-based access:
+  - admin: upload docs, list users/docs, all chat history.
+  - customer: ask questions, own chat history.
+- SQLite tables:
+  - `users`
+  - `documents`
+  - `chat_messages`
+- RAG-backed endpoints:
+  - `/api/chat/ask`
+  - `/api/chat/history`
+- Document ingestion endpoint:
+  - `/api/documents/upload`
 
-### 1. Clone & Create Virtual Environment
+## API Endpoints
+
+- `POST /api/auth/register` (first admin or customer)
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/users` (admin)
+- `POST /api/documents/upload` (admin)
+- `GET /api/documents` (admin)
+- `GET /api/documents/{id}/download` (admin)
+- `POST /api/chat/ask` (admin/customer)
+- `GET /api/chat/history` (admin/customer)
+- `GET /api/rag/status` (admin/customer)
+- `GET /api/health`
+
+## Setup
+
+### 1. Python Environment
 
 ```powershell
-git clone <repo-url>
-cd Q-A_agent
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-### 2. Install Dependencies
-
-```powershell
 pip install -r requirements.txt
 ```
 
-### 3. Configure API Key
+### 2. Environment Variables
 
-Create a `.env` file (or edit the existing one) with your [Google Gemini API key](https://aistudio.google.com/apikey):
+Create or update `.env` in the project root:
 
 ```env
-GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_key_here
+JWT_SECRET_KEY=change_this_secret
+DOCMIND_CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
-### 4. Launch the App
+Optional:
+
+```env
+DOCMIND_DB_PATH=database.db
+DOCMIND_STORAGE_DIR=backend/storage/pdfs
+CHROMA_DIR=backend/data/chroma
+```
+
+### 3. Run Backend
 
 ```powershell
-streamlit run app.py
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Open [http://localhost:8501](http://localhost:8501) in your browser.
-
-### 5. Use It
-
-1. **Upload** a PDF or TXT file using the upload area
-2. Click **⚡ Ingest Documents** to index the content
-3. **Ask questions** in the chat — get grounded answers with source citations!
-
----
-
-## ⌨️ CLI Usage
+### 4. Run Admin Portal
 
 ```powershell
-# Ingest documents
-python cli.py ingest .\docs\report.pdf .\docs\notes.txt
-
-# Ask a single question
-python cli.py ask "What are the key findings?" --show-sources
-
-# Interactive chat session
-python cli.py chat --show-sources
-
-# View store stats
-python cli.py stats
-
-# Clear all indexed data
-python cli.py clear
+cd admin-portal
+npm install
+npm run dev
 ```
 
----
+Admin portal default URL: `http://localhost:5173`
 
-## ⚙️ Configuration
-
-All settings are configured via environment variables (or `.env` file):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GEMINI_API_KEY` | — | **Required.** Your Google Gemini API key |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
-| `GEMINI_TEMPERATURE` | `0.1` | Low = factual, high = creative |
-| `GEMINI_MAX_RETRIES` | `3` | Retry attempts on rate limits |
-| `GEMINI_RETRY_WAIT_SECONDS` | `60` | Wait time between retries |
-| `EMBEDDING_MODEL_NAME` | `all-MiniLM-L6-v2` | Sentence-transformers model |
-| `CHUNK_SIZE` | `400` | Max tokens per chunk |
-| `CHUNK_OVERLAP` | `100` | Overlap tokens between chunks |
-| `TOP_K` | `5` | Number of chunks to retrieve |
-| `RETRIEVAL_MIN_SIMILARITY` | `0.25` | Minimum similarity threshold |
-| `CHROMA_DIR` | `data/chroma` | Vector store directory |
-| `CHROMA_COLLECTION` | `document_chunks` | ChromaDB collection name |
-
----
-
-## 🧪 Running Tests
+### 5. Run Customer Portal
 
 ```powershell
-pytest tests/ -v
+cd customer-portal
+npm install
+npm run dev
 ```
 
+Customer portal default URL: `http://localhost:5174`
+
+## Auth Notes
+
+- Admin registration is allowed only for the first admin account.
+- After first admin exists, additional `role=admin` registrations are blocked.
+- Customers can self-register using `role=customer`.
+
+## Testing
+
+Current tests still validate the reusable RAG modules:
+
+```powershell
+python -m pytest -q
 ```
-tests/test_ingestion.py    — Sentence-aware chunking, edge cases
-tests/test_pipeline.py     — Full RAG pipeline with fakes
-tests/test_vector_store.py — Vector similarity search ordering
-```
 
----
+## Legacy Interfaces (Still Available)
 
-## 🔧 How It Works
-
-### Ingestion Pipeline
-1. **Text Extraction** — PDFs parsed with `pdfplumber` (PyMuPDF fallback); TXT read directly
-2. **Normalization** — Cleans whitespace, encoding artifacts, special characters
-3. **Sentence-Aware Chunking** — Splits at sentence boundaries, respects token limits, overlaps trailing sentences
-4. **Embedding** — Chunks encoded locally with `sentence-transformers` (normalized cosine vectors)
-5. **Storage** — Vectors + metadata persisted in ChromaDB (or pickle fallback)
-
-### Query Pipeline
-1. **Typo Correction** — Gemini fixes spelling/grammar errors in the raw question
-2. **Query Expansion** — Extracts keywords and runs a second retrieval pass for higher recall
-3. **Similarity Search** — Retrieves top-k chunks, filters by minimum similarity threshold
-4. **Deduplication** — Merges results from both passes, keeps best scores
-5. **Answer Generation** — Grounded prompt with chain-of-thought reasoning sent to Gemini
-6. **Fallback Chain** — If Gemini refuses: extractive re-prompt → local sentence extraction
-
----
-
-## 📝 Notes
-
-- **Privacy**: Embeddings and retrieval are fully local. Only answer generation uses the Gemini API.
-- **Deterministic IDs**: Re-uploading the same content updates existing chunks (no duplicates).
-- **Python 3.14+**: ChromaDB may fail due to `pydantic.v1` compatibility — the app auto-falls back to a local pickle-based store.
-- **Scanned PDFs**: Image-only PDFs produce zero chunks unless OCR text is embedded.
-- **Re-ingestion**: After changing chunk size/overlap settings, clear the vector store and re-ingest.
-
----
-
-## 📦 Tech Stack
-
-- **Frontend**: [Streamlit](https://streamlit.io/) with custom CSS
-- **Embeddings**: [sentence-transformers](https://www.sbert.net/) (local)
-- **Vector DB**: [ChromaDB](https://www.trychroma.com/) (local, persistent)
-- **LLM**: [Google Gemini](https://ai.google.dev/) via `google-genai`
-- **PDF Parsing**: [pdfplumber](https://github.com/jsvine/pdfplumber) + [PyMuPDF](https://pymupdf.readthedocs.io/)
-
----
-
-## 📄 License
-
-This project is for educational and personal use.
+- Streamlit app: `streamlit run app.py`
+- CLI:
+  - `python cli.py ingest <files...>`
+  - `python cli.py ask "question" --show-sources`
