@@ -1,148 +1,102 @@
-# DocMind Platform
+# Q-A Agent (DocMind Platform)
 
-DocMind is now structured as a two-portal product on top of one FastAPI backend:
+DocMind is a robust Retrieval-Augmented Generation (RAG) platform structured as a two-portal product powered by a centralized FastAPI backend and Gemini LLM.
 
-- `admin-portal` (React + TypeScript): admin login, document upload, user list, chat/history.
-- `customer-portal` (React + TypeScript): customer login, Q&A chat, personal history.
-- `backend` (FastAPI + SQLite + JWT + existing RAG modules): auth, docs, chat APIs.
+## Architecture & Portals
 
-The existing local RAG engine remains in `src/` and is reused by the backend.
+The platform is divided into three main components:
 
-## Architecture
+- **Admin Portal** (`admin-portal`): Built with React + TypeScript. Allows administrators to upload documents (PDF/TXT), manage user access, and view chat histories.
+- **Customer Portal** (`customer-portal`): Built with React + TypeScript. Provides a customized interface for authenticated customers to ask questions via a Q&A chat interface and view their personal query history.
+- **Backend Core** (`backend`): Built with FastAPI, SQLite, and JWT authentication. It manages users, securely stores documents, and exposes RAG (Retrieval-Augmented Generation) APIs.
 
-1. Admin uploads PDF/TXT.
-2. Backend saves file to `backend/storage/pdfs`.
-3. Backend ingests file with existing pipeline (`src/ingestion.py`, `src/rag_pipeline.py`).
-4. Chunks and embeddings are stored in Chroma (`backend/data/chroma` by default).
-5. Customer asks a question.
-6. Backend retrieves relevant chunks and generates answer via Gemini.
-7. Q&A history is stored in SQLite (`database.db`).
+The underlying RAG engine (located in `src/`) processes the documents, generates embeddings using ChromaDB, and retrieves context for accurate LLM answers.
+
+## Key Features
+
+- **Retrieval-Augmented Generation (RAG)**: Leverages Gemini to provide accurate answers based on the uploaded documents.
+- **Secure Authentication**: Built-in JWT authentication with role-based access control (Admin vs. Customer). Password hashing is done via PBKDF2.
+- **Document Management**: Admins can securely upload and manage PDF and TXT files. The system automatically chunks and indexes these documents.
+- **Chat History**: Full conversation history is stored in an SQLite database, allowing users to review past interactions.
 
 ## Project Structure
 
 ```text
 Q-A_agent/
-|-- admin-portal/
-|-- customer-portal/
-|-- backend/
-|   |-- app/
-|   |   |-- main.py
-|   |   |-- auth.py
-|   |   |-- db.py
-|   |   |-- security.py
-|   |   |-- schemas.py
-|   |   `-- rag_runtime.py
-|   |-- storage/pdfs/
-|   `-- data/chroma/
-|-- src/                  # existing RAG modules reused by backend
-|-- tests/
-|-- app.py                # legacy Streamlit UI (still usable)
-|-- cli.py                # legacy CLI (still usable)
-`-- database.db           # created at runtime
+├── admin-portal/         # React admin application
+├── customer-portal/      # React customer application
+├── backend/              # FastAPI application
+│   ├── app/              # Core API routes, DB models, and schemas
+│   ├── storage/pdfs/     # Uploaded documents storage
+│   └── data/chroma/      # ChromaDB local vector store
+├── src/                  # Reusable RAG pipeline (Ingestion, Embeddings)
+├── tests/                # Automated testing suite
+├── app.py                # Legacy Streamlit UI interface
+├── cli.py                # Legacy Command Line Interface
+└── database.db           # Auto-generated SQLite database
 ```
 
-## Backend Features Implemented
+## Setup Instructions
 
-- JWT auth (implemented manually with HMAC SHA256, no external auth provider).
-- Password hashing with PBKDF2.
-- Role-based access:
-  - admin: upload docs, list users/docs, all chat history.
-  - customer: ask questions, own chat history.
-- SQLite tables:
-  - `users`
-  - `documents`
-  - `chat_messages`
-- RAG-backed endpoints:
-  - `/api/chat/ask`
-  - `/api/chat/history`
-- Document ingestion endpoint:
-  - `/api/documents/upload`
+### 1. Prerequisites
 
-## API Endpoints
+Ensure you have Python 3.9+ and Node.js installed.
 
-- `POST /api/auth/register` (first admin or customer)
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `GET /api/users` (admin)
-- `POST /api/documents/upload` (admin)
-- `GET /api/documents` (admin)
-- `GET /api/documents/{id}/download` (admin)
-- `POST /api/chat/ask` (admin/customer)
-- `GET /api/chat/history` (admin/customer)
-- `GET /api/rag/status` (admin/customer)
-- `GET /api/health`
+### 2. Backend Setup
 
-## Setup
-
-### 1. Python Environment
-
-```powershell
+```bash
+# Create and activate virtual environment
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+# On Windows: .\.venv\Scripts\Activate.ps1
+# On Linux/Mac: source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables
+### 3. Environment Variables
 
-Create or update `.env` in the project root:
+Create a `.env` file in the project root:
 
 ```env
-GEMINI_API_KEY=your_key_here
-JWT_SECRET_KEY=change_this_secret
+GEMINI_API_KEY=your_gemini_api_key_here
+JWT_SECRET_KEY=generate_a_secure_random_string
 DOCMIND_CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
-Optional:
+### 4. Running the Services
 
-```env
-DOCMIND_DB_PATH=database.db
-DOCMIND_STORAGE_DIR=backend/storage/pdfs
-CHROMA_DIR=backend/data/chroma
-```
+You need to run the Backend, Admin Portal, and Customer Portal simultaneously.
 
-### 3. Run Backend
-
-```powershell
+**Terminal 1: Backend**
+```bash
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 4. Run Admin Portal
-
-```powershell
+**Terminal 2: Admin Portal**
+```bash
 cd admin-portal
 npm install
 npm run dev
+# Accessible at http://localhost:5173
 ```
 
-Admin portal default URL: `http://localhost:5173`
-
-### 5. Run Customer Portal
-
-```powershell
+**Terminal 3: Customer Portal**
+```bash
 cd customer-portal
 npm install
 npm run dev
+# Accessible at http://localhost:5174
 ```
 
-Customer portal default URL: `http://localhost:5174`
+## API Documentation
 
-## Auth Notes
+Once the backend is running, you can view the fully interactive API documentation at:
+`http://localhost:8000/docs`
 
-- Admin registration is allowed only for the first admin account.
-- After first admin exists, additional `role=admin` registrations are blocked.
-- Customers can self-register using `role=customer`.
+## Legacy Interfaces
 
-## Testing
-
-Current tests still validate the reusable RAG modules:
-
-```powershell
-python -m pytest -q
-```
-
-## Legacy Interfaces (Still Available)
-
-- Streamlit app: `streamlit run app.py`
-- CLI:
-  - `python cli.py ingest <files...>`
-  - `python cli.py ask "question" --show-sources`
+The original interfaces are still available for basic usage:
+- **Streamlit App**: `streamlit run app.py`
+- **CLI Q&A**: `python cli.py ask "your question" --show-sources`
+- **CLI Ingestion**: `python cli.py ingest document.pdf`
